@@ -9,13 +9,21 @@ namespace CursorOps;
 /// </summary>
 class Program
 {
-    private static CursorOpsConfig? _config;
+    // Non-nullable config - guaranteed to be initialized before use
+    private static CursorOpsConfig _config = null!;
 
     static async Task<int> Main(string[] args)
     {
         // Load configuration from default location
         var configPath = Path.Combine(AppContext.BaseDirectory, "config", "cursorops.json");
         _config = CursorOpsConfig.Load(configPath);
+
+        // Verify configuration loaded successfully
+        if (_config == null)
+        {
+            ConsoleHelper.WriteError("Failed to initialize configuration");
+            return 1;
+        }
 
         // Create root command
         var rootCommand = new RootCommand("CursorOps - Local context engineering and COBOL call-graph analysis for Cursor editor");
@@ -63,7 +71,7 @@ class Program
     /// </summary>
     private static void HandleRulesInject(string? outputPath)
     {
-        var rulesPath = Path.Combine(AppContext.BaseDirectory, _config!.RulesFile);
+        var rulesPath = Path.Combine(AppContext.BaseDirectory, _config.RulesFile);
 
         if (!File.Exists(rulesPath))
         {
@@ -71,7 +79,21 @@ class Program
             return;
         }
 
-        var content = File.ReadAllText(rulesPath);
+        string content;
+        try
+        {
+            content = File.ReadAllText(rulesPath);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            ConsoleHelper.WriteError($"Permission denied reading rules file: {ex.Message}");
+            return;
+        }
+        catch (IOException ex)
+        {
+            ConsoleHelper.WriteError($"Failed to read rules file: {ex.Message}");
+            return;
+        }
 
         if (string.IsNullOrEmpty(outputPath))
         {
@@ -80,9 +102,28 @@ class Program
         }
         else
         {
-            // Write to file
-            File.WriteAllText(outputPath, content);
-            ConsoleHelper.WriteSuccess($"Rules written to: {outputPath}");
+            // Write to file with security validation
+            try
+            {
+                var safePath = SecurityHelper.ValidateOutputPath(outputPath, Directory.GetCurrentDirectory());
+                File.WriteAllText(safePath, content);
+                ConsoleHelper.WriteSuccess($"Rules written to: {safePath}");
+            }
+            catch (System.Security.SecurityException ex)
+            {
+                ConsoleHelper.WriteError($"Security error: {ex.Message}");
+                return;
+            }
+            catch (IOException ex)
+            {
+                ConsoleHelper.WriteError($"Failed to write file: {ex.Message}");
+                return;
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                ConsoleHelper.WriteError($"Permission denied: {ex.Message}");
+                return;
+            }
         }
     }
 
@@ -128,7 +169,7 @@ class Program
     /// </summary>
     private static void HandlePromptList()
     {
-        var promptsPath = Path.Combine(AppContext.BaseDirectory, _config!.PromptsPath);
+        var promptsPath = Path.Combine(AppContext.BaseDirectory, _config.PromptsPath);
 
         if (!Directory.Exists(promptsPath))
         {
@@ -136,7 +177,21 @@ class Program
             return;
         }
 
-        var promptFiles = Directory.GetFiles(promptsPath, "*.md");
+        string[] promptFiles;
+        try
+        {
+            promptFiles = Directory.GetFiles(promptsPath, "*.md");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            ConsoleHelper.WriteError($"Permission denied accessing prompts directory: {ex.Message}");
+            return;
+        }
+        catch (IOException ex)
+        {
+            ConsoleHelper.WriteError($"Failed to read prompts directory: {ex.Message}");
+            return;
+        }
 
         if (promptFiles.Length == 0)
         {
@@ -158,8 +213,26 @@ class Program
     /// </summary>
     private static void HandlePromptPick(string name, string? outputPath)
     {
-        var promptsPath = Path.Combine(AppContext.BaseDirectory, _config!.PromptsPath);
+        // Validate name to prevent path traversal
+        try
+        {
+            name = SecurityHelper.ValidateInputName(name);
+        }
+        catch (System.Security.SecurityException ex)
+        {
+            ConsoleHelper.WriteError($"Invalid prompt name: {ex.Message}");
+            return;
+        }
+
+        var promptsPath = Path.Combine(AppContext.BaseDirectory, _config.PromptsPath);
         var promptFile = Path.Combine(promptsPath, $"{name}.md");
+
+        // Verify the resolved path is within the prompts directory
+        if (!SecurityHelper.IsPathSafe(promptFile, promptsPath))
+        {
+            ConsoleHelper.WriteError("Invalid prompt name: path traversal detected");
+            return;
+        }
 
         if (!File.Exists(promptFile))
         {
@@ -168,7 +241,21 @@ class Program
             return;
         }
 
-        var content = File.ReadAllText(promptFile);
+        string content;
+        try
+        {
+            content = File.ReadAllText(promptFile);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            ConsoleHelper.WriteError($"Permission denied reading prompt file: {ex.Message}");
+            return;
+        }
+        catch (IOException ex)
+        {
+            ConsoleHelper.WriteError($"Failed to read prompt file: {ex.Message}");
+            return;
+        }
 
         if (string.IsNullOrEmpty(outputPath))
         {
@@ -177,9 +264,28 @@ class Program
         }
         else
         {
-            // Write to file
-            File.WriteAllText(outputPath, content);
-            ConsoleHelper.WriteSuccess($"Prompt written to: {outputPath}");
+            // Write to file with security validation
+            try
+            {
+                var safePath = SecurityHelper.ValidateOutputPath(outputPath, Directory.GetCurrentDirectory());
+                File.WriteAllText(safePath, content);
+                ConsoleHelper.WriteSuccess($"Prompt written to: {safePath}");
+            }
+            catch (System.Security.SecurityException ex)
+            {
+                ConsoleHelper.WriteError($"Security error: {ex.Message}");
+                return;
+            }
+            catch (IOException ex)
+            {
+                ConsoleHelper.WriteError($"Failed to write file: {ex.Message}");
+                return;
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                ConsoleHelper.WriteError($"Permission denied: {ex.Message}");
+                return;
+            }
         }
     }
 
@@ -238,24 +344,38 @@ class Program
         sb.AppendLine();
 
         // Include team rules
-        var rulesPath = Path.Combine(AppContext.BaseDirectory, _config!.RulesFile);
+        var rulesPath = Path.Combine(AppContext.BaseDirectory, _config.RulesFile);
         if (File.Exists(rulesPath))
         {
-            sb.AppendLine("## Team Rules");
-            sb.AppendLine();
-            sb.AppendLine(File.ReadAllText(rulesPath));
-            sb.AppendLine();
+            try
+            {
+                sb.AppendLine("## Team Rules");
+                sb.AppendLine();
+                sb.AppendLine(File.ReadAllText(rulesPath));
+                sb.AppendLine();
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+            {
+                ConsoleHelper.WriteWarning($"Failed to read rules file: {ex.Message}");
+            }
         }
 
         // Include call graph if provided
         if (!string.IsNullOrEmpty(graphPath) && File.Exists(graphPath))
         {
-            sb.AppendLine("## Call Graph");
-            sb.AppendLine();
-            sb.AppendLine("```json");
-            sb.AppendLine(File.ReadAllText(graphPath));
-            sb.AppendLine("```");
-            sb.AppendLine();
+            try
+            {
+                sb.AppendLine("## Call Graph");
+                sb.AppendLine();
+                sb.AppendLine("```json");
+                sb.AppendLine(File.ReadAllText(graphPath));
+                sb.AppendLine("```");
+                sb.AppendLine();
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+            {
+                ConsoleHelper.WriteWarning($"Failed to read call graph file: {ex.Message}");
+            }
         }
 
         // Include source files
@@ -270,31 +390,42 @@ class Program
                 continue;
             }
 
-            sb.AppendLine($"### {Path.GetFileName(file)}");
-            sb.AppendLine($"Path: `{file}`");
-            sb.AppendLine();
+            try
+            {
+                sb.AppendLine($"### {Path.GetFileName(file)}");
+                sb.AppendLine($"Path: `{file}`");
+                sb.AppendLine();
 
-            var lines = File.ReadAllLines(file);
+                var lines = File.ReadAllLines(file);
 
             // Check if truncation is needed
             if (lines.Length > _config.MaxFileLines)
             {
-                sb.AppendLine($"*File truncated: {lines.Length} lines (showing first {_config.TrimHeadLines} and last {_config.TrimTailLines})*");
+                // Calculate safe bounds to prevent index out of range errors
+                int actualHeadLines = Math.Min(_config.TrimHeadLines, lines.Length);
+                int actualTailLines = Math.Min(_config.TrimTailLines, lines.Length - actualHeadLines);
+
+                sb.AppendLine($"*File truncated: {lines.Length} lines (showing first {actualHeadLines} and last {actualTailLines})*");
                 sb.AppendLine();
                 sb.AppendLine("```");
 
-                // Head
-                for (int i = 0; i < _config.TrimHeadLines; i++)
+                // Head lines (safe)
+                for (int i = 0; i < actualHeadLines; i++)
                 {
                     sb.AppendLine(lines[i]);
                 }
 
-                sb.AppendLine();
-                sb.AppendLine($"... ({lines.Length - _config.TrimHeadLines - _config.TrimTailLines} lines omitted) ...");
-                sb.AppendLine();
+                int omittedLines = lines.Length - actualHeadLines - actualTailLines;
+                if (omittedLines > 0)
+                {
+                    sb.AppendLine();
+                    sb.AppendLine($"... ({omittedLines} lines omitted) ...");
+                    sb.AppendLine();
+                }
 
-                // Tail
-                for (int i = lines.Length - _config.TrimTailLines; i < lines.Length; i++)
+                // Tail lines (safe)
+                int tailStart = Math.Max(actualHeadLines, lines.Length - actualTailLines);
+                for (int i = tailStart; i < lines.Length; i++)
                 {
                     sb.AppendLine(lines[i]);
                 }
@@ -310,7 +441,14 @@ class Program
                 sb.AppendLine("```");
             }
 
-            sb.AppendLine();
+                sb.AppendLine();
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+            {
+                ConsoleHelper.WriteWarning($"Failed to read source file {file}: {ex.Message}");
+                sb.AppendLine($"*Error reading file: {ex.Message}*");
+                sb.AppendLine();
+            }
         }
 
         var output = sb.ToString();
@@ -322,9 +460,28 @@ class Program
         }
         else
         {
-            // Write to file
-            File.WriteAllText(outputPath, output);
-            ConsoleHelper.WriteSuccess($"Context package written to: {outputPath}");
+            // Write to file with security validation
+            try
+            {
+                var safePath = SecurityHelper.ValidateOutputPath(outputPath, Directory.GetCurrentDirectory());
+                File.WriteAllText(safePath, output);
+                ConsoleHelper.WriteSuccess($"Context package written to: {safePath}");
+            }
+            catch (System.Security.SecurityException ex)
+            {
+                ConsoleHelper.WriteError($"Security error: {ex.Message}");
+                return;
+            }
+            catch (IOException ex)
+            {
+                ConsoleHelper.WriteError($"Failed to write file: {ex.Message}");
+                return;
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                ConsoleHelper.WriteError($"Permission denied: {ex.Message}");
+                return;
+            }
         }
     }
 
@@ -409,7 +566,7 @@ class Program
     {
         ConsoleHelper.WriteInfo($"Tracing COBOL call graph from '{entry}' (depth: {depth})...");
 
-        var builder = new CobolCallGraphBuilder(_config!);
+        var builder = new CobolCallGraphBuilder(_config);
         var graph = builder.BuildGraph(entry, depth);
 
         if (graph.Count == 0)
@@ -431,9 +588,28 @@ class Program
         // Save JSON graph if path provided
         if (!string.IsNullOrEmpty(graphPath))
         {
-            var json = builder.ToJson();
-            File.WriteAllText(graphPath, json);
-            ConsoleHelper.WriteSuccess($"Call graph JSON written to: {graphPath}");
+            try
+            {
+                var safePath = SecurityHelper.ValidateOutputPath(graphPath, Directory.GetCurrentDirectory());
+                var json = builder.ToJson();
+                File.WriteAllText(safePath, json);
+                ConsoleHelper.WriteSuccess($"Call graph JSON written to: {safePath}");
+            }
+            catch (System.Security.SecurityException ex)
+            {
+                ConsoleHelper.WriteError($"Security error: {ex.Message}");
+                return;
+            }
+            catch (IOException ex)
+            {
+                ConsoleHelper.WriteError($"Failed to write file: {ex.Message}");
+                return;
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                ConsoleHelper.WriteError($"Permission denied: {ex.Message}");
+                return;
+            }
         }
         else
         {
@@ -450,7 +626,7 @@ class Program
     {
         ConsoleHelper.WriteInfo($"Generating context for COBOL program '{entry}' (depth: {depth})...");
 
-        var builder = new CobolCallGraphBuilder(_config!);
+        var builder = new CobolCallGraphBuilder(_config);
         var graph = builder.BuildGraph(entry, depth);
 
         if (graph.Count == 0)
@@ -467,13 +643,20 @@ class Program
         sb.AppendLine();
 
         // Include team rules
-        var rulesPath = Path.Combine(AppContext.BaseDirectory, _config!.RulesFile);
+        var rulesPath = Path.Combine(AppContext.BaseDirectory, _config.RulesFile);
         if (File.Exists(rulesPath))
         {
-            sb.AppendLine("## Team Rules");
-            sb.AppendLine();
-            sb.AppendLine(File.ReadAllText(rulesPath));
-            sb.AppendLine();
+            try
+            {
+                sb.AppendLine("## Team Rules");
+                sb.AppendLine();
+                sb.AppendLine(File.ReadAllText(rulesPath));
+                sb.AppendLine();
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+            {
+                ConsoleHelper.WriteWarning($"Failed to read rules file: {ex.Message}");
+            }
         }
 
         // Include call graph statistics
@@ -505,30 +688,43 @@ class Program
                 continue;
             }
 
-            sb.AppendLine($"### {node.ProgramName}");
-            sb.AppendLine($"- File: `{node.FilePath}`");
-            sb.AppendLine($"- Depth: {node.Depth}");
-            sb.AppendLine($"- Calls: {(node.Calls.Count > 0 ? string.Join(", ", node.Calls) : "None")}");
-            sb.AppendLine();
+            try
+            {
+                sb.AppendLine($"### {node.ProgramName}");
+                sb.AppendLine($"- File: `{node.FilePath}`");
+                sb.AppendLine($"- Depth: {node.Depth}");
+                sb.AppendLine($"- Calls: {(node.Calls.Count > 0 ? string.Join(", ", node.Calls) : "None")}");
+                sb.AppendLine();
 
-            var lines = File.ReadAllLines(node.FilePath);
+                var lines = File.ReadAllLines(node.FilePath);
 
             if (lines.Length > _config.MaxFileLines)
             {
-                sb.AppendLine($"*File truncated: {lines.Length} lines (showing first {_config.TrimHeadLines} and last {_config.TrimTailLines})*");
+                // Calculate safe bounds to prevent index out of range errors
+                int actualHeadLines = Math.Min(_config.TrimHeadLines, lines.Length);
+                int actualTailLines = Math.Min(_config.TrimTailLines, lines.Length - actualHeadLines);
+
+                sb.AppendLine($"*File truncated: {lines.Length} lines (showing first {actualHeadLines} and last {actualTailLines})*");
                 sb.AppendLine();
                 sb.AppendLine("```cobol");
 
-                for (int i = 0; i < _config.TrimHeadLines; i++)
+                // Head lines (safe)
+                for (int i = 0; i < actualHeadLines; i++)
                 {
                     sb.AppendLine(lines[i]);
                 }
 
-                sb.AppendLine();
-                sb.AppendLine($"... ({lines.Length - _config.TrimHeadLines - _config.TrimTailLines} lines omitted) ...");
-                sb.AppendLine();
+                int omittedLines = lines.Length - actualHeadLines - actualTailLines;
+                if (omittedLines > 0)
+                {
+                    sb.AppendLine();
+                    sb.AppendLine($"... ({omittedLines} lines omitted) ...");
+                    sb.AppendLine();
+                }
 
-                for (int i = lines.Length - _config.TrimTailLines; i < lines.Length; i++)
+                // Tail lines (safe)
+                int tailStart = Math.Max(actualHeadLines, lines.Length - actualTailLines);
+                for (int i = tailStart; i < lines.Length; i++)
                 {
                     sb.AppendLine(lines[i]);
                 }
@@ -542,7 +738,14 @@ class Program
                 sb.AppendLine("```");
             }
 
-            sb.AppendLine();
+                sb.AppendLine();
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+            {
+                ConsoleHelper.WriteWarning($"Failed to read COBOL file {node.FilePath}: {ex.Message}");
+                sb.AppendLine($"*Error reading file: {ex.Message}*");
+                sb.AppendLine();
+            }
         }
 
         var output = sb.ToString();
@@ -550,10 +753,29 @@ class Program
         // Determine output path
         var finalOutputPath = outputPath ?? $"{entry}_context.md";
 
-        // Write to file
-        File.WriteAllText(finalOutputPath, output);
-        ConsoleHelper.WriteSuccess($"COBOL focus context written to: {finalOutputPath}");
-        ConsoleHelper.WriteInfo($"Total programs included: {graph.Count}");
+        // Write to file with security validation
+        try
+        {
+            var safePath = SecurityHelper.ValidateOutputPath(finalOutputPath, Directory.GetCurrentDirectory());
+            File.WriteAllText(safePath, output);
+            ConsoleHelper.WriteSuccess($"COBOL focus context written to: {safePath}");
+            ConsoleHelper.WriteInfo($"Total programs included: {graph.Count}");
+        }
+        catch (System.Security.SecurityException ex)
+        {
+            ConsoleHelper.WriteError($"Security error: {ex.Message}");
+            return;
+        }
+        catch (IOException ex)
+        {
+            ConsoleHelper.WriteError($"Failed to write file: {ex.Message}");
+            return;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            ConsoleHelper.WriteError($"Permission denied: {ex.Message}");
+            return;
+        }
     }
 
     #endregion
@@ -585,11 +807,18 @@ class Program
         // Demo 1: Rules inject
         Console.WriteLine("1. Team Rules (cursorops rules inject)");
         Console.WriteLine("   ----------------------------------------");
-        var rulesPath = Path.Combine(AppContext.BaseDirectory, _config!.RulesFile);
+        var rulesPath = Path.Combine(AppContext.BaseDirectory, _config.RulesFile);
         if (File.Exists(rulesPath))
         {
-            var rulesContent = File.ReadAllText(rulesPath);
-            Console.WriteLine(rulesContent.Length > 200 ? rulesContent.Substring(0, 200) + "..." : rulesContent);
+            try
+            {
+                var rulesContent = File.ReadAllText(rulesPath);
+                Console.WriteLine(rulesContent.Length > 200 ? rulesContent.Substring(0, 200) + "..." : rulesContent);
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+            {
+                ConsoleHelper.WriteWarning($"   (Failed to read rules file: {ex.Message})");
+            }
         }
         else
         {
@@ -600,20 +829,27 @@ class Program
         // Demo 2: Prompt list
         Console.WriteLine("2. Prompt Templates (cursorops prompt list)");
         Console.WriteLine("   ----------------------------------------");
-        var promptsPath = Path.Combine(AppContext.BaseDirectory, _config!.PromptsPath);
+        var promptsPath = Path.Combine(AppContext.BaseDirectory, _config.PromptsPath);
         if (Directory.Exists(promptsPath))
         {
-            var promptFiles = Directory.GetFiles(promptsPath, "*.md");
-            if (promptFiles.Length > 0)
+            try
             {
-                foreach (var file in promptFiles)
+                var promptFiles = Directory.GetFiles(promptsPath, "*.md");
+                if (promptFiles.Length > 0)
                 {
-                    Console.WriteLine($"   - {Path.GetFileNameWithoutExtension(file)}");
+                    foreach (var file in promptFiles)
+                    {
+                        Console.WriteLine($"   - {Path.GetFileNameWithoutExtension(file)}");
+                    }
+                }
+                else
+                {
+                    ConsoleHelper.WriteWarning("   (No prompts found - create .md files in prompts/)");
                 }
             }
-            else
+            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
             {
-                ConsoleHelper.WriteWarning("   (No prompts found - create .md files in prompts/)");
+                ConsoleHelper.WriteWarning($"   (Failed to read prompts directory: {ex.Message})");
             }
         }
         else
