@@ -1,0 +1,51 @@
+{
+  // Root directory containing source code to analyze
+  // Update this path to match your GSS source code location
+  "RootDirectory": "C:\\GSS\\Source",
+
+  // File patterns for matching COBOL source files
+  // Searches recursively for files matching these patterns
+  "CobolFilePatterns": [
+    "*.cbl",
+    "*.cob",
+    "*.CBL",
+    "*.COB"
+  ],
+
+  // File patterns for VB.NET source files (future use)
+  "VbFilePatterns": [
+    "*.vb",
+    "*.VB"
+  ],
+
+  // File patterns for C# source files
+  "CsFilePatterns": [
+    "*.cs",
+    "*.CS"
+  ],
+
+  // Maximum number of lines to include from a single file in context packs
+  // Files exceeding this will be truncated with head/tail sections
+  "MaxFileLines": 500,
+
+  // Number of lines to show from the beginning of truncated files
+  "TrimHeadLines": 50,
+
+  // Number of lines to show from the end of truncated files
+  "TrimTailLines": 50,
+
+  // Regex patterns for detecting COBOL CALL statements
+  // Each pattern must include a named capture group "prog" for the called program name
+  // These patterns handle common COBOL CALL variations
+  "CallPatterns": [
+    "CALL\\s+['\"](?<prog>\\w+)['\"]",     // CALL "PROGNAME" or CALL 'PROGNAME'
+    "CALL\\s+(?<prog>\\w+)",               // CALL PROGNAME (no quotes)
+    "CALL\\s+['\"](?<prog>[A-Z0-9-]+)['\"]"  // CALL with hyphens in name
+  ],
+
+  // Path to the team rules Markdown file (relative to this config file)
+  "RulesFile": "rules/rules.md",
+
+  // Directory containing prompt template Markdown files
+  "PromptsPath": "prompts"
+}

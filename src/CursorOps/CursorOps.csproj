@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Target .NET 8 for modern C# features and long-term support -->
+    <TargetFramework>net8.0</TargetFramework>
+
+    <!-- Enable nullable reference types for better null safety -->
+    <Nullable>enable</Nullable>
+
+    <!-- Console application output type -->
+    <OutputType>Exe</OutputType>
+
+    <!-- Enable implicit usings to reduce boilerplate -->
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- Assembly and product information -->
+    <AssemblyName>cursorops</AssemblyName>
+    <Product>CursorOps CLI</Product>
+    <Version>1.0.0</Version>
+    <Authors>Travis Jones</Authors>
+    <Company>Global Shop Solutions</Company>
+    <Description>Local context-engineering and COBOL call-graph analysis tool for Cursor editor integration</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- System.CommandLine for modern CLI parsing with slash-style commands -->
+    <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Copy config, rules, and prompts folders to output directory for local execution -->
+    <None Include="..\..\config\**\*" Link="config\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\..\rules\**\*" Link="rules\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\..\prompts\**\*" Link="prompts\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>
